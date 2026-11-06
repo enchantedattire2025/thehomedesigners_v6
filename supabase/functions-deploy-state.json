@@ -1,0 +1,73 @@
+{
+  "projectId": "72715111",
+  "functions": {
+    "ai-quotation-create": {
+      "hasChanged": false,
+      "hash": "f7957e2a31dbbf0b847cdc3557fbbd6f28397599ee765d8d7e523030bdd2ff13"
+    },
+    "ai-quotation-process": {
+      "hasChanged": false,
+      "hash": "d4b32d2c857984a3bca7fe1d7c99a781c3c1736e98c4dcb2766ddc9d352144cc"
+    },
+    "ai-quotation-save-draft": {
+      "hasChanged": false,
+      "hash": "4b8da3202106fd18db7389e9c9d4930f52fb1731f6f0e0dee5662a09681c1364"
+    },
+    "chat-ai": {
+      "hasChanged": false,
+      "hash": "e8437985b13041efb2ef1fc25b8fb8e0a562c9466ae09512f43b1e02459b1305"
+    },
+    "gemini-chat": {
+      "hasChanged": false,
+      "hash": "3afe178a629804b4acbd67b699ed10972a2167d315b98e5a807ce3b57a2dccc9"
+    },
+    "get-customer-quotes": {
+      "hasChanged": false,
+      "hash": "f58eeb3c85f2cf76e3975673dd7201f951ef14a3095a247a0c1eb246f393348f"
+    },
+    "openai-chat": {
+      "hasChanged": false,
+      "hash": "354c849a937b8e142dff8f347aa98af5c2b603c4ba531f05a5c010e6e4ff41b2"
+    },
+    "process-whatsapp-queue": {
+      "hasChanged": false,
+      "hash": "bdc1792198a0bdf8612b545601181cb842ddb2aa0c296abc0ffd4e57b191a2d5"
+    },
+    "quote-payment-create": {
+      "hasChanged": false,
+      "hash": "280bc7887cdb8632ef3e049dfb4709af775cd122294108c67285687483ad46b7"
+    },
+    "quote-payment-verify": {
+      "hasChanged": false,
+      "hash": "280bc7887cdb8632ef3e049dfb4709af775cd122294108c67285687483ad46b7"
+    },
+    "send-bill-email": {
+      "hasChanged": false,
+      "hash": "210534fc565856e0ae8c7e49b292a3f6f4856ac90dc169fed183a2e0dc956c7a"
+    },
+    "send-order-receipt-email": {
+      "hasChanged": false,
+      "hash": "fae2a6d2709e6102d81b77a3f9003564cb5267c106d8fc397989ceb85cb3b6ee"
+    },
+    "send-whatsapp-notification": {
+      "hasChanged": false,
+      "hash": "16ac757d709e9b9a9a0d8b1cde9de115c3cd5ca10aebe46535742828c6421265"
+    },
+    "vastu-analysis": {
+      "hasChanged": false,
+      "hash": "e1f27901ee37d5e95ebe38b74c2eb22c8428380ff686326fb160ebeacfe990b6"
+    },
+    "payment-checkout": {
+      "hasChanged": false,
+      "hash": "74733dd74a7c0db9395e1232fcb1edc29cafb1dd478cbd720178b1567106af85"
+    },
+    "payment-review": {
+      "hasChanged": false,
+      "hash": "5c2fd0fd049bc767b09608123125909c96b733c8f1d9975f5ed63f39fe6145d6"
+    },
+    "razorpay-webhook": {
+      "hasChanged": false,
+      "hash": "88ada7ce8763979e8afe5ff27393a01cfdbc90226a282c90d0f033c9f848440e"
+    }
+  }
+}

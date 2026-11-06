@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Clock, AlertCircle, CreditCard, Sparkles, Zap, Loader2 } from 'lucide-react';
+import { ArrowLeft, Check, Sparkles, Zap, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import PaymentOptionsModal from '../components/payments/PaymentOptionsModal';
 
 interface SubscriptionPlan {
   id: string;
@@ -38,7 +39,6 @@ const DesignerSubscription = () => {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
-  const [designerId, setDesignerId] = useState<string | null>(null);
 
   const loadSubscriptionData = useCallback(async () => {
     if (!user) { setLoading(false); return; }
@@ -48,7 +48,6 @@ const DesignerSubscription = () => {
         .from('designers').select('id').eq('user_id', user.id).maybeSingle();
       if (designerError) throw designerError;
       if (!designerData) { navigate('/designer-registration'); return; }
-      setDesignerId(designerData.id);
 
       const { data: subData, error: subError } = await supabase
         .from('designer_subscriptions')
@@ -56,7 +55,7 @@ const DesignerSubscription = () => {
         .eq('designer_id', designerData.id)
         .maybeSingle();
       if (subError) throw subError;
-      if (subData) setSubscription(subData as DesignerSubscriptionRow);
+      setSubscription(subData ? (subData as DesignerSubscriptionRow) : null);
 
       const { data: plansData, error: plansError } = await supabase
         .from('subscription_plans')
@@ -200,135 +199,17 @@ const DesignerSubscription = () => {
       </div>
 
       {showPaymentModal && selectedPlan && (
-        <PaymentModal
-          plan={selectedPlan}
-          subscription={subscription}
-          designerId={designerId}
+        <PaymentOptionsModal
+          purpose="designer_subscription"
+          referenceId={selectedPlan.id}
+          title="Complete Payment"
+          description={`${selectedPlan.name} plan (${selectedPlan.billing_period})`}
+          baseAmount={Number(selectedPlan.price)}
           onClose={() => setShowPaymentModal(false)}
-          onSuccess={() => { setShowPaymentModal(false); void loadSubscriptionData(); }}
+          onPaid={() => { setShowPaymentModal(false); void loadSubscriptionData(); }}
+          onSubmitted={() => void loadSubscriptionData()}
         />
       )}
-    </div>
-  );
-};
-
-interface PaymentModalProps {
-  plan: SubscriptionPlan;
-  subscription: DesignerSubscriptionRow | null;
-  designerId: string | null;
-  onClose: () => void;
-  onSuccess: () => void;
-}
-
-const PaymentModal = ({ plan, subscription, designerId, onClose, onSuccess }: PaymentModalProps) => {
-  const [paymentMethod, setPaymentMethod] = useState('card');
-  const [processing, setProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handlePayment = async () => {
-    if (!designerId) return;
-    setProcessing(true);
-    setError(null);
-    try {
-      const startDate = new Date();
-      const endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + 1);
-
-      const paymentData = {
-        designer_subscription_id: subscription?.id || null,
-        amount: plan.price,
-        currency: 'INR',
-        payment_method: paymentMethod,
-        payment_gateway: 'razorpay',
-        transaction_id: `TXN_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-        payment_status: 'completed',
-        payment_date: new Date().toISOString(),
-        billing_period_start: startDate.toISOString(),
-        billing_period_end: endDate.toISOString(),
-        metadata: { plan_name: plan.name, billing_period: plan.billing_period, amount: plan.price, payment_method: paymentMethod },
-      };
-
-      const { error: paymentError } = await supabase.from('subscription_payments').insert([paymentData]);
-      if (paymentError) throw paymentError;
-
-      if (subscription) {
-        const { error: subError } = await supabase
-          .from('designer_subscriptions')
-          .update({
-            subscription_plan_id: plan.id,
-            status: 'active',
-            subscription_start_date: startDate.toISOString(),
-            subscription_end_date: endDate.toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', subscription.id);
-        if (subError) throw subError;
-      } else {
-        const { error: insertError } = await supabase
-          .from('designer_subscriptions')
-          .insert({
-            designer_id: designerId,
-            subscription_plan_id: plan.id,
-            status: 'active',
-            subscription_start_date: startDate.toISOString(),
-            subscription_end_date: endDate.toISOString(),
-            trial_start_date: new Date().toISOString(),
-            trial_end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          });
-        if (insertError) throw insertError;
-      }
-
-      onSuccess();
-    } catch (err) {
-      console.error('Payment error:', err);
-      setError('Payment failed. Please try again.');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900">Complete Payment</h2>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
-        </div>
-
-        <div className="mb-5 rounded-xl bg-slate-50 p-4">
-          <h3 className="font-semibold text-slate-900">{plan.name} Plan</h3>
-          <div className="mt-1 flex items-end justify-between">
-            <span className="text-2xl font-bold text-slate-900">{formatCurrency(plan.price)}</span>
-            <span className="text-slate-600">/{plan.billing_period}</span>
-          </div>
-        </div>
-
-        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-
-        <div className="mb-5">
-          <label className="mb-2 block text-sm font-medium text-slate-700">Payment Method</label>
-          <div className="space-y-2">
-            {[
-              { value: 'card', label: 'Credit/Debit Card' },
-              { value: 'upi', label: 'UPI' },
-              { value: 'netbanking', label: 'Net Banking' },
-              { value: 'wallet', label: 'Wallet' },
-            ].map((method) => (
-              <label key={method.value} className="flex cursor-pointer items-center rounded-lg border p-3 hover:bg-slate-50">
-                <input type="radio" name="payment-method" value={method.value} checked={paymentMethod === method.value} onChange={(e) => setPaymentMethod(e.target.value)} className="mr-3" />
-                <span className="text-slate-900">{method.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex gap-3">
-          <button type="button" onClick={onClose} disabled={processing} className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={handlePayment} disabled={processing} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-white hover:bg-primary-700 disabled:bg-slate-400">
-            {processing ? <><Loader2 className="h-5 w-5 animate-spin" /> Processing...</> : <><CreditCard className="h-5 w-5" /> Pay {formatCurrency(plan.price)}</>}
-          </button>
-        </div>
-      </div>
     </div>
   );
 };

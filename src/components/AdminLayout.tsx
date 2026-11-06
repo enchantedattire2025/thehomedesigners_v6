@@ -42,6 +42,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { label: 'Projects', icon: FolderKanban, path: '/admin/projects' },
       { label: 'Quotations', icon: FileText, path: '/admin/quotations' },
+      { label: 'Payments', icon: CreditCard, path: '/admin/payments' },
       {
         label: 'Subscriptions & Billing',
         icon: CreditCard,

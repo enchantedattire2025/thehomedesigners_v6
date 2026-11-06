@@ -1,23 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import {
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Loader2,
-  ThumbsUp,
-  ThumbsDown,
-  Edit3,
-  MessageSquare,
-  X,
-  IndianRupee,
-  ShieldCheck,
-  Info,
-  RotateCcw,
-  Ban,
-} from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, ThumbsUp, ThumbsDown, CreditCard as Edit3, MessageSquare, X, IndianRupee, ShieldCheck, Info, RotateCcw, Ban } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import QuoteMessagingPanel from './QuoteMessagingPanel';
+import PaymentOptionsModal from './payments/PaymentOptionsModal';
 
 interface QuoteActionsPanelProps {
   quote: any;
@@ -44,7 +30,7 @@ const REJECT_REASONS = [
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
 
-type ActionMode = 'accept' | 'changes' | 'question' | 'reject' | null;
+type ActionMode = 'accept' | 'payment' | 'changes' | 'question' | 'reject' | null;
 
 const QuoteActionsPanel: React.FC<QuoteActionsPanelProps> = ({ quote, onRefresh }) => {
   const { user } = useAuth();
@@ -53,8 +39,7 @@ const QuoteActionsPanel: React.FC<QuoteActionsPanelProps> = ({ quote, onRefresh 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Accept & Proceed state
-  const [paymentProcessing, setPaymentProcessing] = useState(false);
+  const [accepting, setAccepting] = useState(false);
 
   // Configured advance payment config (percent + min + terms)
   const [advanceConfig, setAdvanceConfig] = useState<{ percent: number; min_amount: number; terms: string }>({ percent: 10, min_amount: 0, terms: '' });
@@ -62,7 +47,7 @@ const QuoteActionsPanel: React.FC<QuoteActionsPanelProps> = ({ quote, onRefresh 
   useEffect(() => {
     supabase
       .rpc('get_advance_payment_config')
-      .then(({ data }) => {
+      .then(({ data }: { data: Array<{ percent: number; min_amount: number; terms: string }> | null }) => {
         if (Array.isArray(data) && data.length > 0) {
           const row = data[0];
           setAdvanceConfig({
@@ -98,6 +83,10 @@ const QuoteActionsPanel: React.FC<QuoteActionsPanelProps> = ({ quote, onRefresh 
 
   const showActions = canAct && !isConfirmed && !isRejected;
 
+  const advanceAmount = Number(quote.confirmation_amount) > 0
+    ? Number(quote.confirmation_amount)
+    : Math.round(Number(quote.total_amount || 0) * (advanceConfig.percent / 100));
+
   const closeAll = () => {
     setActionMode(null);
     setError(null);
@@ -109,120 +98,27 @@ const QuoteActionsPanel: React.FC<QuoteActionsPanelProps> = ({ quote, onRefresh 
     setRejectComments('');
   };
 
-  // Razorpay script loader
-  const loadRazorpay = (): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if ((window as any).Razorpay) {
-        resolve();
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error('Failed to load Razorpay checkout. Check your internet connection.'));
-      document.body.appendChild(script);
-    });
-  };
-
   const handleAcceptAndProceed = async () => {
     if (!user) return;
-    try {
-      setPaymentProcessing(true);
+    if (isAcceptedPendingPayment) {
       setError(null);
-
-      // 1. Create Razorpay order via edge function
-      const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || 'https://zxttalysbycssowlhynq.supabase.co';
-      const anonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
-
-      const createRes = await fetch(`${supabaseUrl}/functions/v1/quote-payment-create`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-          apikey: anonKey,
-        },
-        body: JSON.stringify({ quoteId: quote.id }),
+      setActionMode('payment');
+      return;
+    }
+    try {
+      setAccepting(true);
+      setError(null);
+      const { error: acceptError } = await supabase.rpc('accept_quote', {
+        p_quote_id: quote.id,
+        p_feedback: null,
       });
-
-      if (!createRes.ok) {
-        const errBody = await createRes.json().catch(() => ({}));
-        throw new Error(errBody?.error || 'Failed to initiate payment. Please try again.');
-      }
-
-      const orderData = await createRes.json();
-
-      // 2. Load Razorpay checkout
-      await loadRazorpay();
-
-      // 3. Launch Razorpay checkout
-      await new Promise<void>((resolve, reject) => {
-        const rzp = new (window as any).Razorpay({
-          key: orderData.keyId,
-          amount: orderData.amount,
-          currency: orderData.currency || 'INR',
-          name: 'The Home Designers',
-          description: '10% Confirmation Payment',
-          order_id: orderData.orderId,
-          prefill: {
-            name: quote.customer_name || '',
-            email: quote.customer_email || '',
-          },
-          theme: { color: '#0ea5e9' },
-          handler: async () => {
-            // The payment succeeded on the frontend, but we must verify server-side.
-            // Razorpay returns razorpay_payment_id and razorpay_signature in the handler args.
-            // We'll get them from the handler's response object.
-            resolve();
-          },
-          modal: {
-            ondismiss: () => {
-              reject(new Error('Payment was cancelled. You can retry the payment from your quotes list.'));
-            },
-          },
-        });
-
-        // Patch handler to capture response fields
-        rzp.on('payment.success', async (resp: any) => {
-          try {
-            const verifyRes = await fetch(`${supabaseUrl}/functions/v1/quote-payment-verify`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${accessToken}`,
-                apikey: anonKey,
-              },
-              body: JSON.stringify({
-                quoteId: quote.id,
-                razorpayOrderId: orderData.orderId,
-                razorpayPaymentId: resp.razorpay_payment_id,
-                razorpaySignature: resp.razorpay_signature,
-              }),
-            });
-
-            if (!verifyRes.ok) {
-              const errBody = await verifyRes.json().catch(() => ({}));
-              throw new Error(errBody?.error || 'Payment verification failed. Please contact support.');
-            }
-
-            setSuccess('Payment verified! Your quotation is confirmed and designer contact details are now unlocked.');
-            setActionMode(null);
-            onRefresh();
-            resolve();
-          } catch (err: any) {
-            setError(err.message || 'Payment verification failed.');
-            onRefresh();
-            reject(err);
-          }
-        });
-
-        rzp.open();
-      });
+      if (acceptError) throw acceptError;
+      setActionMode('payment');
+      onRefresh();
     } catch (err: any) {
-      setError(err.message || 'Payment could not be completed.');
+      setError(err.message || 'Could not accept this quotation.');
     } finally {
-      setPaymentProcessing(false);
+      setAccepting(false);
     }
   };
 
@@ -328,7 +224,7 @@ const QuoteActionsPanel: React.FC<QuoteActionsPanelProps> = ({ quote, onRefresh 
             <p className="text-sm text-amber-700">You accepted this quotation but the {advanceConfig.percent}% advance payment has not been verified yet. The designer's contact details remain locked until payment is confirmed. Use Retry below to complete the payment, or Cancel to release the selection.</p>
             <div className="flex flex-wrap gap-2 mt-3">
               <button
-                onClick={() => { setError(null); setSuccess(null); setActionMode('accept'); }}
+                onClick={() => { setError(null); setSuccess(null); setActionMode('payment'); }}
                 className="inline-flex items-center space-x-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
               >
                 <RotateCcw className="w-4 h-4" /><span>Retry Payment</span>
@@ -453,13 +349,13 @@ const QuoteActionsPanel: React.FC<QuoteActionsPanelProps> = ({ quote, onRefresh 
             )}
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700 flex items-start space-x-2">
               <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <span>Accepting selects this designer and closes the other quotations for this project. You will pay the {percentLabel}% advance amount now via Razorpay. The designer's contact details unlock only after this payment is verified, and the project becomes active at that point.</span>
+              <span>Accepting selects this designer and closes the other quotations for this project. You will pay the {percentLabel}% advance amount next, by card, net banking, wallet or UPI, or by UPI transfer with approval. The designer's contact details unlock only after payment is confirmed, and the project becomes active at that point.</span>
             </div>
             <div className="flex gap-3 pt-2">
-              <button onClick={closeAll} disabled={paymentProcessing} className="flex-1 bg-gray-200 text-gray-800 py-2.5 rounded-lg font-medium hover:bg-gray-300 transition-colors disabled:opacity-50">Cancel</button>
-              <button onClick={handleAcceptAndProceed} disabled={paymentProcessing} className="flex-1 bg-primary-500 hover:bg-primary-600 text-white py-2.5 rounded-lg font-semibold transition-colors disabled:opacity-50 flex items-center justify-center space-x-2">
-                {paymentProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                <span>{paymentProcessing ? 'Processing...' : `Pay ${percentLabel}% Now`}</span>
+              <button onClick={closeAll} disabled={accepting} className="flex-1 bg-gray-200 text-gray-800 py-2.5 rounded-lg font-medium hover:bg-gray-300 transition-colors disabled:opacity-50">Cancel</button>
+              <button onClick={handleAcceptAndProceed} disabled={accepting} className="flex-1 bg-primary-500 hover:bg-primary-600 text-white py-2.5 rounded-lg font-semibold transition-colors disabled:opacity-50 flex items-center justify-center space-x-2">
+                {accepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                <span>{accepting ? 'Processing...' : `Continue to ${percentLabel}% Payment`}</span>
               </button>
             </div>
           </div>
@@ -607,6 +503,26 @@ const QuoteActionsPanel: React.FC<QuoteActionsPanelProps> = ({ quote, onRefresh 
       {renderActionButtons()}
 
       {actionMode === 'accept' && renderAcceptModal()}
+      {actionMode === 'payment' && (
+        <PaymentOptionsModal
+          purpose="quote_advance"
+          referenceId={quote.id}
+          title="Quotation advance payment"
+          description={`${advanceConfig.percent}% advance for your confirmed quotation`}
+          baseAmount={advanceAmount}
+          onPaid={() => {
+            setSuccess('Payment verified! Your quotation is confirmed and designer contact details are now unlocked.');
+            closeAll();
+            onRefresh();
+          }}
+          onSubmitted={() => {
+            setSuccess('Your transfer proof was submitted. The advance will be confirmed once the payment is approved.');
+            closeAll();
+            onRefresh();
+          }}
+          onClose={closeAll}
+        />
+      )}
       {actionMode === 'changes' && renderChangesModal()}
       {actionMode === 'reject' && renderRejectModal()}
       {actionMode === 'question' && renderQuestionPanel()}

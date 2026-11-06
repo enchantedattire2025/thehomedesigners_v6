@@ -1,14 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Image as ImageIcon, AlertCircle, Check, X, CreditCard, Shield, Sparkles, Palette } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
+import { Image as ImageIcon, Check, X, CreditCard, Sparkles, Palette } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-
-declare global {
-  interface Window {
-    paypal?: any;
-  }
-}
+import PaymentOptionsModal from '../components/payments/PaymentOptionsModal';
 
 interface WallpaperOrderData {
   id: string;
@@ -32,8 +27,6 @@ interface WallpaperOrderData {
   delivery_date: string | null;
   notes: string | null;
   payment_method: string | null;
-  paypal_order_id: string | null;
-  paypal_payer_email: string | null;
   payment_status: string | null;
 }
 
@@ -46,7 +39,6 @@ interface SelectedWallpaper {
 }
 
 export default function WallpaperOrder() {
-  const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -56,9 +48,7 @@ export default function WallpaperOrder() {
   const [isCustomOrder, setIsCustomOrder] = useState(false);
   const [selectedWallpaper, setSelectedWallpaper] = useState<SelectedWallpaper | null>(null);
   const [paymentStep, setPaymentStep] = useState<'form' | 'payment' | 'success'>('form');
-  const [paypalReady, setPaypalReady] = useState(false);
-  const paypalContainerRef = useRef<HTMLDivElement>(null);
-  const paypalButtonsRendered = useRef(false);
+  const [pendingOrder, setPendingOrder] = useState<{ id: string; advance: number } | null>(null);
   const [nameError, setNameError] = useState('');
   const [wallLengthError, setWallLengthError] = useState('');
   const [wallHeightError, setWallHeightError] = useState('');
@@ -114,32 +104,6 @@ export default function WallpaperOrder() {
     }
   }, [location]);
 
-  // Dynamically load the PayPal SDK only when the user reaches the payment step
-  useEffect(() => {
-    if (paymentStep !== 'payment') return;
-    if (window.paypal) {
-      setPaypalReady(true);
-      return;
-    }
-    const existing = document.getElementById('paypal-sdk-script');
-    if (existing) {
-      existing.addEventListener('load', () => setPaypalReady(true));
-      return;
-    }
-    const script = document.createElement('script');
-    script.id = 'paypal-sdk-script';
-    script.src = 'https://www.paypal.com/sdk/js?client-id=AaY7R9hGocTUocwCDxme_AGkXSzhFRySbQAPBiX6Rni99aihEYr-zFMxM6opBjp3Nm5qbmMbRE5LI0IH&currency=USD';
-    script.async = true;
-    script.onload = () => setPaypalReady(true);
-    document.head.appendChild(script);
-  }, [paymentStep]);
-
-  useEffect(() => {
-    if (paymentStep === 'payment' && window.paypal && !paypalButtonsRendered.current) {
-      setPaypalReady(true);
-    }
-  }, [paymentStep]);
-
   const calculateTotal = useCallback(() => {
     const length = parseFloat(formData.wall_size_length) || 0;
     const height = parseFloat(formData.wall_size_height) || 0;
@@ -155,62 +119,6 @@ export default function WallpaperOrder() {
 
     return { areaSqFt, rate, total, advance };
   }, [formData.wall_size_length, formData.wall_size_height, formData.wall_unit, formData.wallpaper_type]);
-
-  const renderPayPalButtons = useCallback(() => {
-    if (!paypalContainerRef.current || !window.paypal || paypalButtonsRendered.current) return;
-
-    const { advance } = calculateTotal();
-    if (advance <= 0) return;
-
-    paypalButtonsRendered.current = true;
-
-    window.paypal.Buttons({
-      style: {
-        layout: 'vertical',
-        color: 'blue',
-        shape: 'rect',
-        label: 'pay',
-        height: 50
-      },
-      createOrder: (_data: any, actions: any) => {
-        const { advance: currentAdvance } = calculateTotal();
-        // PayPal does not support INR; convert to USD at approx 84 INR = 1 USD
-        const INR_TO_USD = 84;
-        const advanceUsd = (currentAdvance / INR_TO_USD).toFixed(2);
-        return actions.order.create({
-          purchase_units: [{
-            description: '3D Wallpaper Order - Advance Payment',
-            amount: {
-              currency_code: 'USD',
-              value: advanceUsd
-            }
-          }]
-        });
-      },
-      onApprove: async (_data: any, actions: any) => {
-        try {
-          const details = await actions.order.capture();
-          await saveOrder(details.id, details.payer?.email_address || '');
-        } catch (error: any) {
-          console.error('PayPal capture error:', error);
-          alert('Payment was approved but there was an error processing. Please contact support.');
-        }
-      },
-      onError: (err: any) => {
-        console.error('PayPal error:', err);
-        alert('Payment failed. Please try again.');
-      },
-      onCancel: () => {
-        // User cancelled - do nothing
-      }
-    }).render(paypalContainerRef.current);
-  }, [calculateTotal]);
-
-  useEffect(() => {
-    if (paypalReady && paymentStep === 'payment') {
-      renderPayPalButtons();
-    }
-  }, [paypalReady, paymentStep, renderPayPalButtons]);
 
   const fetchCustomerData = async () => {
     if (!user) return;
@@ -343,7 +251,7 @@ export default function WallpaperOrder() {
     else setPincodeError('');
   };
 
-  const handleProceedToPayment = (e: React.FormEvent) => {
+  const handleProceedToPayment = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!user) {
@@ -379,11 +287,10 @@ export default function WallpaperOrder() {
       return;
     }
 
-    paypalButtonsRendered.current = false;
-    setPaymentStep('payment');
+    await createPendingOrder();
   };
 
-  const saveOrder = async (paypalOrderId: string, payerEmail: string) => {
+  const createPendingOrder = async () => {
     if (!user) return;
 
     setLoading(true);
@@ -413,7 +320,7 @@ export default function WallpaperOrder() {
 
       const filteredImages = formData.reference_images.filter(img => img.trim() !== '');
 
-      const { error } = await supabase
+      const { data: order, error } = await supabase
         .from('wallpaper_orders')
         .insert({
           customer_id: finalCustomerId,
@@ -429,27 +336,32 @@ export default function WallpaperOrder() {
           total_area_sqft: areaSqFt,
           total_amount: total,
           advance_amount: advance,
-          payment_method: 'paypal',
-          paypal_order_id: paypalOrderId,
-          paypal_payer_email: payerEmail,
-          payment_status: 'completed',
+          payment_status: 'pending',
           notes: formData.notes || null,
           is_custom_order: isCustomOrder,
           custom_design_description: isCustomOrder ? (formData.custom_design_description || null) : null,
           custom_design_style: isCustomOrder ? (formData.custom_design_style || null) : null,
           custom_color_preferences: isCustomOrder ? (formData.custom_color_preferences || null) : null
-        });
+        })
+        .select('id')
+        .single();
 
       if (error) throw error;
 
-      setPaymentStep('success');
-      fetchOrders();
+      setPendingOrder({ id: order.id, advance });
+      setPaymentStep('payment');
     } catch (error: any) {
-      console.error('Error placing order:', error);
-      alert(error.message || 'Failed to save order. Please contact support with your PayPal transaction ID: ' + paypalOrderId);
+      console.error('Error creating order:', error);
+      alert(error.message || 'Failed to create your order. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePaymentDone = () => {
+    setPendingOrder(null);
+    setPaymentStep('success');
+    fetchOrders();
   };
 
   const resetForm = () => {
@@ -457,7 +369,7 @@ export default function WallpaperOrder() {
     setSelectedWallpaper(null);
     setIsCustomOrder(false);
     setPaymentStep('form');
-    paypalButtonsRendered.current = false;
+    setPendingOrder(null);
     setFormData({
       customer_name: formData.customer_name,
       customer_phone: formData.customer_phone,
@@ -498,7 +410,7 @@ export default function WallpaperOrder() {
             <ul className="text-sm text-blue-800 space-y-1">
               <li>Normal 3D Wallpaper: Rs.160 per sq ft (with installation)</li>
               <li>Golden/Silver Foil 3D Wallpaper: Rs.220 per sq ft (with installation)</li>
-              <li>10% advance payment required via PayPal</li>
+              <li>10% advance payment required via Razorpay or UPI</li>
               <li>Preview will be provided before final confirmation</li>
               <li>Delivery and execution at site after confirmation</li>
               <li>Installation within 2 days</li>
@@ -991,7 +903,7 @@ export default function WallpaperOrder() {
                       <span>Rs.{total.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-blue-600 font-semibold">
-                      <span>10% Advance Payment (PayPal):</span>
+                      <span>10% Advance Payment:</span>
                       <span>Rs.{advance.toFixed(2)}</span>
                     </div>
                   </div>
@@ -1008,7 +920,7 @@ export default function WallpaperOrder() {
                 </button>
                 <button
                   type="submit"
-                  disabled={areaSqFt <= 0}
+                  disabled={areaSqFt <= 0 || loading}
                   className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   <CreditCard className="w-5 h-5" />
@@ -1019,87 +931,20 @@ export default function WallpaperOrder() {
           </div>
         )}
 
-        {user && showForm && paymentStep === 'payment' && (
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Complete Payment</h2>
-              <button
-                onClick={() => {
-                  setPaymentStep('form');
-                  paypalButtonsRendered.current = false;
-                }}
-                className="text-gray-500 hover:text-gray-700 text-sm font-medium"
-              >
-                Back to Order Details
-              </button>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
-              <h3 className="font-semibold text-blue-900 mb-3">Payment Summary</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-blue-800">Wallpaper Type:</span>
-                  <span className="font-medium text-blue-900">
-                    {formData.wallpaper_type === 'golden_foil' ? 'Golden Foil' : 'Normal'} 3D
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-blue-800">Wall Area:</span>
-                  <span className="font-medium text-blue-900">{areaSqFt.toFixed(2)} sq ft</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-blue-800">Total Order Amount:</span>
-                  <span className="font-medium text-blue-900">Rs.{total.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-base font-bold border-t border-blue-200 pt-2 mt-2">
-                  <span className="text-blue-900">Advance Payment (10%):</span>
-                  <span className="text-blue-900">Rs.{advance.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-xs text-blue-700 mt-1">
-                  <span>PayPal charges in USD (approx):</span>
-                  <span>~${(advance / 84).toFixed(2)} USD</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <div className="flex items-center gap-2 text-sm text-gray-600 mb-4">
-                <Shield className="w-4 h-4 text-green-600" />
-                <span>Secure payment powered by PayPal</span>
-              </div>
-
-              {loading && (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-3"></div>
-                  <p className="text-gray-600">Processing your order...</p>
-                </div>
-              )}
-
-              <div
-                ref={paypalContainerRef}
-                className={loading ? 'hidden' : ''}
-              />
-
-              {!window.paypal && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm text-red-800 font-medium">PayPal failed to load</p>
-                    <p className="text-sm text-red-700 mt-1">
-                      Please check your internet connection and reload the page. If the issue persists, try disabling ad blockers.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-6 bg-gray-50 rounded-lg p-4">
-              <p className="text-xs text-gray-500 text-center">
-                By completing this payment, you agree to our terms of service.
-                The remaining 90% is payable after preview approval and before delivery.
-              </p>
-            </div>
-          </div>
+        {user && showForm && paymentStep === 'payment' && pendingOrder && (
+          <PaymentOptionsModal
+            purpose="wallpaper_order"
+            referenceId={pendingOrder.id}
+            title="3D wallpaper advance payment"
+            description={`10% advance for your ${formData.wallpaper_type === 'golden_foil' ? 'Golden Foil' : 'Normal'} 3D wallpaper order`}
+            baseAmount={pendingOrder.advance}
+            onPaid={handlePaymentDone}
+            onSubmitted={handlePaymentDone}
+            onClose={() => {
+              setPendingOrder(null);
+              setPaymentStep('form');
+            }}
+          />
         )}
 
         {user && showForm && paymentStep === 'success' && (
@@ -1109,8 +954,7 @@ export default function WallpaperOrder() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-3">Order Placed Successfully!</h2>
             <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              Your advance payment has been received. We will send you a wallpaper preview soon.
-              You can track your order status below.
+              Your order is saved. It is confirmed once your advance payment is verified, and you can track its status below.
             </p>
             <button
               onClick={resetForm}
@@ -1162,9 +1006,14 @@ export default function WallpaperOrder() {
                         }`}>
                           {order.status.replace('_', ' ').toUpperCase()}
                         </span>
-                        {order.payment_method === 'paypal' && order.payment_status === 'completed' && (
+                        {order.payment_status === 'completed' && (
                           <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full border border-green-200">
-                            Paid via PayPal
+                            Advance paid
+                          </span>
+                        )}
+                        {order.payment_status !== 'completed' && (
+                          <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full border border-amber-200">
+                            Advance awaiting confirmation
                           </span>
                         )}
                       </div>

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Sparkles, Zap, Crown, AlertCircle, Loader2, CreditCard, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Check, Sparkles, Zap, Crown, AlertCircle, Loader2, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import PaymentOptionsModal from '../components/payments/PaymentOptionsModal';
 
 interface AIPlan {
   id: string;
@@ -52,7 +53,6 @@ const DesignerAISubscription = () => {
   const [aiSubscription, setAISubscription] = useState<AISubscription | null>(null);
   const [creditPeriod, setCreditPeriod] = useState<CreditPeriod | null>(null);
   const [standardSub, setStandardSub] = useState<StandardSub | null>(null);
-  const [designerId, setDesignerId] = useState<string | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<AIPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +66,6 @@ const DesignerAISubscription = () => {
         .from('designers').select('id').eq('user_id', user.id).maybeSingle();
       if (designerError) throw designerError;
       if (!designer) { navigate('/designer-registration'); return; }
-      setDesignerId(designer.id);
 
       const [plansRes, stdRes, aiRes] = await Promise.all([
         supabase.from('ai_subscription_plans').select('*').eq('is_active', true).order('sort_order'),
@@ -222,119 +221,17 @@ const DesignerAISubscription = () => {
       </div>
 
       {showPaymentModal && selectedPlan && (
-        <AIPaymentModal
-          plan={selectedPlan}
-          designerId={designerId}
-          existingSubscription={aiSubscription}
+        <PaymentOptionsModal
+          purpose="ai_subscription"
+          referenceId={selectedPlan.id}
+          title="Complete Payment"
+          description={`${selectedPlan.name} (${selectedPlan.monthly_credits} credits/month)`}
+          baseAmount={Number(selectedPlan.price)}
           onClose={() => setShowPaymentModal(false)}
-          onSuccess={() => { setShowPaymentModal(false); void loadData(); }}
+          onPaid={() => { setShowPaymentModal(false); void loadData(); }}
+          onSubmitted={() => void loadData()}
         />
       )}
-    </div>
-  );
-};
-
-interface AIPaymentModalProps {
-  plan: AIPlan;
-  designerId: string | null;
-  existingSubscription: AISubscription | null;
-  onClose: () => void;
-  onSuccess: () => void;
-}
-
-const AIPaymentModal = ({ plan, designerId, existingSubscription, onClose, onSuccess }: AIPaymentModalProps) => {
-  const [paymentMethod, setPaymentMethod] = useState('card');
-  const [processing, setProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handlePayment = async () => {
-    if (!designerId) return;
-    setProcessing(true);
-    setError(null);
-    try {
-      const startDate = new Date();
-      const endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + 1);
-
-      if (existingSubscription) {
-        const { error: updateError } = await supabase
-          .from('designer_ai_subscriptions')
-          .update({
-            ai_plan_id: plan.id,
-            status: 'active',
-            subscription_start_date: startDate.toISOString(),
-            subscription_end_date: endDate.toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existingSubscription.id);
-        if (updateError) throw updateError;
-      } else {
-        const { error: insertError } = await supabase
-          .from('designer_ai_subscriptions')
-          .insert({
-            designer_id: designerId,
-            ai_plan_id: plan.id,
-            status: 'active',
-            subscription_start_date: startDate.toISOString(),
-            subscription_end_date: endDate.toISOString(),
-            auto_renew: true,
-            payment_provider: 'razorpay',
-          });
-        if (insertError) throw insertError;
-      }
-
-      onSuccess();
-    } catch (err) {
-      console.error('AI subscription payment error:', err);
-      setError('Payment failed. Please try again.');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900">Complete Payment</h2>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
-        </div>
-
-        <div className="mb-5 rounded-xl bg-slate-50 p-4">
-          <h3 className="font-semibold text-slate-900">{plan.name}</h3>
-          <div className="mt-1 flex items-end justify-between">
-            <span className="text-2xl font-bold text-slate-900">{formatCurrency(plan.price)}</span>
-            <span className="text-slate-600">/{plan.billing_period}</span>
-          </div>
-          <p className="mt-2 text-sm text-primary-700">{plan.monthly_credits} AI credits per month</p>
-        </div>
-
-        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-
-        <div className="mb-5">
-          <label className="mb-2 block text-sm font-medium text-slate-700">Payment Method</label>
-          <div className="space-y-2">
-            {[
-              { value: 'card', label: 'Credit/Debit Card' },
-              { value: 'upi', label: 'UPI' },
-              { value: 'netbanking', label: 'Net Banking' },
-              { value: 'wallet', label: 'Wallet' },
-            ].map((method) => (
-              <label key={method.value} className="flex cursor-pointer items-center rounded-lg border p-3 hover:bg-slate-50">
-                <input type="radio" name="ai-payment-method" value={method.value} checked={paymentMethod === method.value} onChange={(e) => setPaymentMethod(e.target.value)} className="mr-3" />
-                <span className="text-slate-900">{method.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex gap-3">
-          <button type="button" onClick={onClose} disabled={processing} className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={handlePayment} disabled={processing} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-white hover:bg-primary-700 disabled:bg-slate-400">
-            {processing ? <><Loader2 className="h-5 w-5 animate-spin" /> Processing...</> : <><CreditCard className="h-5 w-5" /> Pay {formatCurrency(plan.price)}</>}
-          </button>
-        </div>
-      </div>
     </div>
   );
 };

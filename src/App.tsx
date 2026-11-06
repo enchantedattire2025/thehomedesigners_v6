@@ -65,6 +65,7 @@ const AdminDesigners = lazy(() => import('./pages/admin/AdminDesigners'));
 const AdminHomeowners = lazy(() => import('./pages/admin/AdminHomeowners'));
 const AdminProjects = lazy(() => import('./pages/admin/AdminProjects'));
 const AdminQuotations = lazy(() => import('./pages/admin/AdminQuotations'));
+const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
 const AdminSubscriptions = lazy(() => import('./pages/admin/AdminSubscriptions'));
 const AdminAIMonitoring = lazy(() => import('./pages/admin/AdminAIMonitoring'));
 const AdminContentMarketing = lazy(() => import('./pages/admin/AdminContentMarketing'));
@@ -438,6 +439,7 @@ const AppContent: React.FC = () => {
             <Route path="/admin/homeowners" element={<AdminRoute><AdminHomeowners /></AdminRoute>} />
             <Route path="/admin/projects" element={<AdminRoute><AdminProjects /></AdminRoute>} />
             <Route path="/admin/quotations" element={<AdminRoute><AdminQuotations /></AdminRoute>} />
+            <Route path="/admin/payments" element={<AdminRoute><AdminPayments /></AdminRoute>} />
             <Route path="/admin/subscriptions" element={<AdminRoute><AdminSubscriptions /></AdminRoute>} />
             <Route path="/admin/ai-monitoring" element={<AdminRoute><AdminAIMonitoring /></AdminRoute>} />
             <Route path="/admin/content" element={<AdminRoute><AdminContentMarketing /></AdminRoute>} />
