@@ -1,5 +1,6 @@
 import { Copy, CreditCard as Edit3, Image as ImageIcon, Trash2 } from 'lucide-react';
 import type { QuoteItem } from '../pages/DesignerQuoteGenerator';
+import { itemRate } from '../utils/quoteItemCalculation';
 
 interface QuoteItemCardProps {
   item: QuoteItem;
@@ -44,7 +45,7 @@ const QuoteItemCard = ({ item, index, formatCurrency, onEdit, onDuplicate, onDel
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-2 text-xs text-gray-500">
-        <span>{formatCurrency(item.unit_price)} / {item.pricing_mode === 'modular' ? 'sq.ft' : item.unit}</span>
+        <span>{formatCurrency(itemRate(item))} / {item.pricing_mode === 'modular' ? 'sq.ft' : item.unit}</span>
         {item.discount_percent > 0 && <span className="text-emerald-700">{item.discount_percent}% item discount</span>}
         <strong className="text-sm text-secondary-800">{formatCurrency(item.amount)}</strong>
       </div>

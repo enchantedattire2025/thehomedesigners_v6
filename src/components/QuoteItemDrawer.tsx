@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Image as ImageIcon, X } from 'lucide-react';
 import type { Material, QuoteItem } from '../pages/DesignerQuoteGenerator';
+import { calculateItem, itemRate } from '../utils/quoteItemCalculation';
 
 type DrawerItem = QuoteItem;
 
@@ -78,25 +79,14 @@ const QuoteItemDrawer = ({
 
   const discount = draft.discount_percent ?? 0;
 
-  const rate = isModular
-    ? (draft.per_sqft_rate ?? draft.unit_price)
-    : draft.unit_price;
+  const rate = itemRate(draft);
 
   const width = draft.width ?? 0;
   const height = draft.height ?? 0;
   const units = draft.number_of_units;
   const quantity = draft.quantity;
 
-  const rawAmount = isModular
-    ? width *
-      height *
-      units *
-      rate *
-      (1 - discount / 100)
-    : units *
-      quantity *
-      draft.unit_price *
-      (1 - discount / 100);
+  const rawAmount = calculateItem(draft).amount;
 
   const amount = Number.isFinite(rawAmount)
     ? Math.round((rawAmount + Number.EPSILON) * 100) / 100
@@ -133,11 +123,7 @@ const QuoteItemDrawer = ({
       name: material.name,
       description: material.description || '',
       unit: material.unit,
-      unit_price: price,
-      amount: price *
-        previous.number_of_units *
-        previous.quantity *
-        (1 - (previous.discount_percent || 0) / 100),
+      ...(isModular ? { per_sqft_rate: price } : { unit_price: price }),
     }));
   };
 
@@ -184,7 +170,6 @@ const QuoteItemDrawer = ({
         update('quantity', 0);
       } else if (field === 'unit_price') {
         update('unit_price', 0);
-        if (isModular) update('per_sqft_rate', 0);
       } else if (field === 'per_sqft_rate') {
         update('per_sqft_rate', 0);
       } else if (field === 'discount_percent') {
@@ -218,7 +203,6 @@ const QuoteItemDrawer = ({
       update('quantity', value);
     } else if (field === 'unit_price') {
       update('unit_price', value);
-      if (isModular) update('per_sqft_rate', value);
     } else if (field === 'discount_percent') {
       update('discount_percent', value);
     } else if (field === 'width') {
@@ -229,7 +213,6 @@ const QuoteItemDrawer = ({
       update('depth', value);
     } else if (field === 'per_sqft_rate') {
       update('per_sqft_rate', value);
-      update('unit_price', value);
     }
   };
 
@@ -276,13 +259,7 @@ const QuoteItemDrawer = ({
 
     setValidationError('');
 
-    onSave({
-      ...draft,
-      amount,
-      area_sqft: isModular
-        ? Number((width * height).toFixed(2))
-        : draft.area_sqft,
-    });
+    onSave({ ...draft, amount });
   };
 
   const numberInputClass =

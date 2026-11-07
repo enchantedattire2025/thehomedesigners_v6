@@ -707,7 +707,7 @@ export function generateQuoteItemsFromTemplate(
         number_of_units: numberOfUnits,
         quantity: effectiveQty,
         unit: tmplItem.unit,
-        unit_price: unitPrice,
+        unit_price: tmplItem.pricingMethod === 'per_sqft' ? 0 : unitPrice,
         discount_percent: 0,
         amount,
         section: roomLabel as any,
