@@ -711,6 +711,7 @@ export function generateQuoteItemsFromTemplate(
         discount_percent: 0,
         amount,
         section: roomLabel as any,
+        pricing_mode: tmplItem.pricingMethod === 'per_sqft' ? 'modular' : 'standard',
         width: width,
         height: height,
         depth: depth,

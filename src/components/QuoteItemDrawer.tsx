@@ -22,7 +22,7 @@ const MAX_UNITS = 100_000;
 const MAX_DIMENSION = 10_000;
 const MAX_AMOUNT = 1_000_000_000_000;
 
-const baseItem = (): QuoteItem => ({
+const baseItem = (section: string): QuoteItem => ({
   item_type: 'material',
   name: '',
   description: '',
@@ -32,7 +32,8 @@ const baseItem = (): QuoteItem => ({
   unit_price: 0,
   discount_percent: 0,
   amount: 0,
-  section: 'modular',
+  section,
+  pricing_mode: 'modular',
   width_unit: 'feet',
   height_unit: 'feet',
   depth_unit: 'feet',
@@ -49,14 +50,14 @@ const QuoteItemDrawer = ({
   onUpload,
 }: QuoteItemDrawerProps) => {
   const [draft, setDraft] = useState<DrawerItem>(
-    item ?? baseItem()
+    item ? { ...item, pricing_mode: 'modular' } : baseItem(roomName)
   );
   const [uploading, setUploading] = useState(false);
   const [validationError, setValidationError] = useState('');
 
   useEffect(() => {
     if (isOpen) {
-      setDraft(item ?? baseItem());
+      setDraft(item ? { ...item, pricing_mode: 'modular' } : baseItem(roomName));
       setValidationError('');
     }
   }, [isOpen, item, roomName]);
@@ -73,7 +74,7 @@ const QuoteItemDrawer = ({
     }));
   };
 
-  const isModular = draft.section === 'modular';
+  const isModular = draft.pricing_mode === 'modular';
 
   const discount = draft.discount_percent ?? 0;
 
@@ -355,12 +356,8 @@ const QuoteItemDrawer = ({
                 value={isModular ? 'modular' : 'standard'}
                 onChange={event =>
                   update(
-                    'section',
-                    (
-                      event.target.value === 'modular'
-                        ? 'modular'
-                        : roomName
-                    ) as QuoteItem['section']
+                    'pricing_mode',
+                    event.target.value === 'modular' ? 'modular' : 'standard'
                   )
                 }
                 className={numberInputClass}

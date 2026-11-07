@@ -527,12 +527,12 @@ const QuoteViewer = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {quote.items.filter(i => i.section !== 'modular').length > 0 && (
+                  {quote.items.filter(i => i.pricing_mode !== 'modular').length > 0 && (
                     <>
                       <tr className="bg-primary-50 quote-section-row">
                         <td colSpan={12} className="py-2 px-4 font-semibold text-primary-700 text-sm border-b">On-Site Work</td>
                       </tr>
-                      {quote.items.filter(i => i.section !== 'modular').map((item) => (
+                      {quote.items.filter(i => i.pricing_mode !== 'modular').map((item) => (
                         <tr key={item.id} className="border-b border-gray-100">
                           <td className="py-3 px-4 font-medium text-gray-800">{item.name}</td>
                           <td className="py-3 px-4 text-gray-600 text-sm">{item.description || '-'}</td>
@@ -552,12 +552,12 @@ const QuoteViewer = () => {
                       ))}
                     </>
                   )}
-                  {quote.items.filter(i => i.section === 'modular').length > 0 && (
+                  {quote.items.filter(i => i.pricing_mode === 'modular').length > 0 && (
                     <>
                       <tr className="bg-primary-50 quote-section-row">
                         <td colSpan={12} className="py-2 px-4 font-semibold text-primary-700 text-sm border-b">Modular Work</td>
                       </tr>
-                      {quote.items.filter(i => i.section === 'modular').map((item) => (
+                      {quote.items.filter(i => i.pricing_mode === 'modular').map((item) => (
                         <tr key={item.id} className="border-b border-gray-100">
                           <td className="py-3 px-4 font-medium text-gray-800">{item.name}</td>
                           <td className="py-3 px-4 text-gray-600 text-sm">{item.description || '-'}</td>

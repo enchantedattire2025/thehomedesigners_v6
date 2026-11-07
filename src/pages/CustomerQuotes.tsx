@@ -1,29 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  FileText,
-  CheckCircle,
-  XCircle,
-  Calendar,
-  Clock,
-  ArrowLeft,
-  Eye,
-  Download,
-  ThumbsUp,
-  ThumbsDown,
-  AlertCircle,
-  Loader2,
-  IndianRupee as Rupee,
-  UserCheck,
-  Upload,
-  Paperclip,
-  Phone,
-  Mail,
-  MapPin,
-  Edit3,
-  ShieldCheck,
-  MessageSquare
-} from 'lucide-react';
+import { FileText, CheckCircle, XCircle, Calendar, Clock, ArrowLeft, Eye, Download, ThumbsUp, ThumbsDown, AlertCircle, Loader2, IndianRupee as Rupee, UserCheck, Upload, Paperclip, Phone, Mail, MapPin, CreditCard as Edit3, ShieldCheck, MessageSquare } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import SendToDesignerModal from '../components/SendToDesignerModal';
@@ -725,12 +702,12 @@ const CustomerQuotes = () => {
                       )}
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {selectedQuote.items && selectedQuote.items.filter((i: any) => i.section !== 'modular').length > 0 && (
+                      {selectedQuote.items && selectedQuote.items.filter((i: any) => i.pricing_mode !== 'modular').length > 0 && (
                         <>
                           <tr className="bg-primary-50">
                             <td colSpan={9} className="py-2 px-4 font-semibold text-primary-700 text-sm">On-Site Work</td>
                           </tr>
-                          {selectedQuote.items.filter((i: any) => i.section !== 'modular').map((item: any) => (
+                          {selectedQuote.items.filter((i: any) => i.pricing_mode !== 'modular').map((item: any) => (
                             <tr key={item.id} className="hover:bg-gray-50">
                               <td className="py-3 px-4 text-sm font-medium text-gray-800">{item.name}</td>
                               <td className="py-3 px-4 text-sm text-gray-600">{item.description || '-'}</td>
@@ -745,12 +722,12 @@ const CustomerQuotes = () => {
                           ))}
                         </>
                       )}
-                      {selectedQuote.items && selectedQuote.items.filter((i: any) => i.section === 'modular').length > 0 && (
+                      {selectedQuote.items && selectedQuote.items.filter((i: any) => i.pricing_mode === 'modular').length > 0 && (
                         <>
                           <tr className="bg-primary-50">
                             <td colSpan={9} className="py-2 px-4 font-semibold text-primary-700 text-sm">Modular Work</td>
                           </tr>
-                          {selectedQuote.items.filter((i: any) => i.section === 'modular').map((item: any) => (
+                          {selectedQuote.items.filter((i: any) => i.pricing_mode === 'modular').map((item: any) => (
                             <tr key={item.id} className="hover:bg-gray-50">
                               <td className="py-3 px-4 text-sm font-medium text-gray-800">{item.name}</td>
                               <td className="py-3 px-4 text-sm text-gray-600">{item.description || '-'}</td>

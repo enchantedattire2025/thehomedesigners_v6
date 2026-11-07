@@ -1,4 +1,4 @@
-import { Copy, Edit3, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { Copy, CreditCard as Edit3, Image as ImageIcon, Trash2 } from 'lucide-react';
 import type { QuoteItem } from '../pages/DesignerQuoteGenerator';
 
 interface QuoteItemCardProps {
@@ -12,7 +12,7 @@ interface QuoteItemCardProps {
 
 const QuoteItemCard = ({ item, index, formatCurrency, onEdit, onDuplicate, onDelete }: QuoteItemCardProps) => {
   const dimensions = [item.width, item.height, item.depth].filter(value => value && value > 0).join(' × ');
-  const measurement = item.section === 'modular' ? `${item.area_sqft ?? 0} sq.ft` : `${item.quantity} ${item.unit}`;
+  const measurement = item.pricing_mode === 'modular' ? `${item.area_sqft ?? 0} sq.ft` : `${item.quantity} ${item.unit}`;
 
   return (
     <article className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition hover:border-primary-300 hover:shadow-md">
@@ -44,7 +44,7 @@ const QuoteItemCard = ({ item, index, formatCurrency, onEdit, onDuplicate, onDel
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-2 text-xs text-gray-500">
-        <span>{formatCurrency(item.unit_price)} / {item.section === 'modular' ? 'sq.ft' : item.unit}</span>
+        <span>{formatCurrency(item.unit_price)} / {item.pricing_mode === 'modular' ? 'sq.ft' : item.unit}</span>
         {item.discount_percent > 0 && <span className="text-emerald-700">{item.discount_percent}% item discount</span>}
         <strong className="text-sm text-secondary-800">{formatCurrency(item.amount)}</strong>
       </div>
