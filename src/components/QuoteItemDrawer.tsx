@@ -22,7 +22,7 @@ const MAX_UNITS = 100_000;
 const MAX_DIMENSION = 10_000;
 const MAX_AMOUNT = 1_000_000_000_000;
 
-const baseItem = (section: string): QuoteItem => ({
+const baseItem = (): QuoteItem => ({
   item_type: 'material',
   name: '',
   description: '',
@@ -32,7 +32,7 @@ const baseItem = (section: string): QuoteItem => ({
   unit_price: 0,
   discount_percent: 0,
   amount: 0,
-  section: section as QuoteItem['section'],
+  section: 'modular',
   width_unit: 'feet',
   height_unit: 'feet',
   depth_unit: 'feet',
@@ -49,14 +49,14 @@ const QuoteItemDrawer = ({
   onUpload,
 }: QuoteItemDrawerProps) => {
   const [draft, setDraft] = useState<DrawerItem>(
-    item ?? baseItem(roomName)
+    item ?? baseItem()
   );
   const [uploading, setUploading] = useState(false);
   const [validationError, setValidationError] = useState('');
 
   useEffect(() => {
     if (isOpen) {
-      setDraft(item ?? baseItem(roomName));
+      setDraft(item ?? baseItem());
       setValidationError('');
     }
   }, [isOpen, item, roomName]);
@@ -365,8 +365,8 @@ const QuoteItemDrawer = ({
                 }
                 className={numberInputClass}
               >
-                <option value="standard">Quantity × rate</option>
                 <option value="modular">Dimensions × rate</option>
+                <option value="standard">Quantity × rate</option>
               </select>
             </label>
           </div>
